@@ -4,8 +4,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
-import { db, collection, getDocs, getDoc, setDoc, updateDoc, doc, query, orderBy, limit } from './firebase';
-import { onRequest } from 'firebase-functions/v2/https';
+import mongoose from 'mongoose';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,25 +14,50 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// MongoDB Connection
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://Samid:Sete.1234567@cluster0.cscbtwo.mongodb.net/ton-game?retryWrites=true&w=majority';
+
+mongoose.connect(MONGODB_URI)
+  .then(() => console.log('Connected to MongoDB Atlas'))
+  .catch(err => console.error('MongoDB connection error:', err));
+
+// User Schema
+const userSchema = new mongoose.Schema({
+  userId: { type: String, required: true, unique: true },
+  walletAddress: { type: String, default: null },
+  score: { type: Number, default: 0 },
+  referrals: { type: Number, default: 0 },
+  spent: { type: Number, default: 0 },
+  energy: { type: Number, default: 100 },
+  level: { type: Number, default: 1 },
+  lastActive: { type: Number, default: Date.now },
+  quests: { type: Map, of: Boolean, default: {} }
+});
+
+const User = mongoose.model('User', userSchema);
+
+// Health Check para o Render
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: Date.now() });
+});
+
 // API Routes
 app.get('/api/tonconnect/payload', (req, res) => {
   const payload = Math.random().toString(36).substring(2, 15);
   res.json({ payload });
 });
 
-// ... (rest of the routes stay the same)
 app.get('/api/me', async (req, res) => {
   const { address, guestId } = req.query;
   const id = address ? `wallet_${address}` : (guestId as string || 'anonymous');
   
   try {
-    const userDoc = doc(db, 'users', id);
-    const docSnap = await getDoc(userDoc);
+    let user = await User.findOne({ userId: id });
     
-    if (docSnap.exists()) {
-      res.json(docSnap.data());
+    if (user) {
+      res.json(user);
     } else {
-      const newUser = {
+      user = new User({
         userId: id,
         walletAddress: address || null,
         score: 0,
@@ -43,9 +67,9 @@ app.get('/api/me', async (req, res) => {
         level: 1,
         lastActive: Date.now(),
         quests: {}
-      };
-      await setDoc(userDoc, newUser);
-      res.json(newUser);
+      });
+      await user.save();
+      res.json(user);
     }
   } catch (e) {
     res.status(500).json({ error: 'Failed to fetch user' });
@@ -57,9 +81,6 @@ app.post('/api/save-progress', async (req, res) => {
   const id = address ? `wallet_${address}` : (guestId as string || 'anonymous');
   
   try {
-    const userDoc = doc(db, 'users', id);
-    const docSnap = await getDoc(userDoc);
-    
     const updateData: any = { lastActive: Date.now() };
     if (score !== undefined) updateData.score = score;
     if (level !== undefined) updateData.level = level;
@@ -67,17 +88,18 @@ app.post('/api/save-progress', async (req, res) => {
     if (referrals !== undefined) updateData.referrals = referrals;
     if (spent !== undefined) updateData.spent = spent;
     
-    if (docSnap.exists()) {
-      const userData = docSnap.data();
+    let user = await User.findOne({ userId: id });
+    
+    if (user) {
       if (questId) {
-        const quests = userData.quests || {};
-        quests[questId] = true;
-        updateData.quests = quests;
+        user.quests.set(questId, true);
+        updateData.quests = user.quests;
       }
-      await updateDoc(userDoc, updateData);
-      res.json({ success: true, user: { ...userData, ...updateData } });
+      Object.assign(user, updateData);
+      await user.save();
+      res.json({ success: true, user });
     } else {
-      const newUser = {
+      const newUser = new User({
         userId: id,
         walletAddress: address || null,
         score: score || 0,
@@ -87,8 +109,8 @@ app.post('/api/save-progress', async (req, res) => {
         level: level || 1,
         lastActive: Date.now(),
         quests: questId ? { [questId]: true } : {}
-      };
-      await setDoc(userDoc, newUser);
+      });
+      await newUser.save();
       res.json({ success: true, user: newUser });
     }
   } catch (e) {
@@ -100,15 +122,9 @@ app.get('/api/leaderboard', async (req, res) => {
   const { type, address } = req.query;
   
   try {
-    const usersCol = collection(db, 'users');
-    const q = query(usersCol, orderBy(type as string || 'score', 'desc'), limit(50));
-    const querySnapshot = await getDocs(q);
+    const sortField = type as string || 'score';
+    const allUsers = await User.find().sort({ [sortField]: -1 }).limit(50);
     
-    const allUsers: any[] = [];
-    querySnapshot.forEach((doc) => {
-      allUsers.push(doc.data());
-    });
-
     const rankedList = allUsers.map((u, index) => ({
       rank: index + 1,
       name: u.walletAddress ? `${u.walletAddress.slice(0, 4)}...${u.walletAddress.slice(-4)}` : `Guest_${u.userId.slice(-4)}`,
@@ -125,22 +141,31 @@ app.get('/api/leaderboard', async (req, res) => {
   }
 });
 
-// Exporta para o Firebase Functions
-export const api = onRequest(app);
+// Inicia o servidor para ambientes como Render, Railway ou Local
+const PORT = Number(process.env.PORT) || 3000;
 
-// Mantém o servidor local rodando para desenvolvimento
-if (process.env.NODE_ENV !== 'production') {
+if (process.env.NODE_ENV === 'production') {
+  const distPath = path.join(process.cwd(), 'dist');
+  app.use(express.static(distPath));
+  app.get('*all', (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
+
+// Só inicia o listen se não estiver rodando como Firebase Function (opcional, mas seguro)
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
   async function startVite() {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
-    
-    const PORT = 3000;
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Local server running on http://localhost:${PORT}`);
-    });
   }
   startVite();
 }

@@ -2,8 +2,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useTonConnectUI, useTonWallet } from '@tonconnect/ui-react';
 import { checkProof, getAccountInfo, saveProgress, getTonConnectPayload, getLeaderboard } from './services/api';
-import { auth } from './firebase';
-import { saveUserMetrics } from './services/firebaseService';
 import { SYMBOLS, SHOP_ITEMS, DAILY_QUESTS, POINTS_NEEDED, TORCH_FRAMES, TOP_ANIMATION_FRAMES, WIN_ANIMATION_FRAMES, COIN_FRAMES, CLICK_SOUND_URL, WIN_SOUND_URL, COIN_SOUND_URL, SPIN_SOUND_BASE64, BACKGROUND_MUSIC_URL, DESTINATION_WALLET, JACKPOT_SOUND_BASE64 } from './constants';
 import { GameScreen, LeaderboardCategory, LeaderboardEntry, ShopItem } from './types';
 import { SlotReel } from './components/SlotReel';
@@ -53,20 +51,20 @@ const App: React.FC = () => {
   const ignoreNextClick = useRef(false);
   const isHolding = useRef(false);
 
-  // Sync with Firebase
-  const syncWithFirebase = useCallback((currentScore: number, currentSpent: number, currentEnergy: number, currentReferrals: number, currentQuests: any[]) => {
+  // Sync with Backend
+  const syncWithBackend = useCallback((currentScore: number, currentSpent: number, currentEnergy: number, currentReferrals: number, currentQuests: any[]) => {
     if (!wallet && !localStorage.getItem('slot_alchemy_guest_id')) return;
     
     const completedQuestIds = currentQuests.filter(q => q.rewardClaimed).map(q => q.id);
     
-    saveUserMetrics({
-      walletAddress: wallet?.account.address || '',
+    saveProgress({
+      address: wallet?.account.address,
       score: currentScore,
-      tonSpent: currentSpent,
+      spent: currentSpent,
       energy: currentEnergy,
       referrals: currentReferrals,
-      questsCompleted: completedQuestIds
-    }).catch(err => console.error("Firebase Sync Error:", err));
+      // questId logic is handled differently in saveProgress, but we can pass the data
+    }).catch(err => console.error("Backend Sync Error:", err));
   }, [wallet]);
 
   // Lógica de Progressão Dinâmica
@@ -289,11 +287,11 @@ const App: React.FC = () => {
         if (isSoundEnabled) new Audio(COIN_SOUND_URL).play().catch(() => {});
         setScore(prev => {
           const newScore = prev + totalWin;
-          syncWithFirebase(newScore, spent, energy, referrals, quests);
+          syncWithBackend(newScore, spent, energy, referrals, quests);
           return newScore;
         });
     } else {
-        syncWithFirebase(score, spent, energy, referrals, quests);
+        syncWithBackend(score, spent, energy, referrals, quests);
     }
     saveProgress({ address: wallet?.account.address, score, energy, level: progression.level });
     setTimeout(() => { setIsSpinning(false); }, 400);
@@ -375,9 +373,9 @@ const App: React.FC = () => {
         setSpent(newSpent);
         setEnergy(newEnergy);
         
-        // Save to Backend and Firebase
+        // Save to Backend
         saveProgress({ address: wallet.account.address, spent: newSpent, energy: newEnergy });
-        syncWithFirebase(score, newSpent, newEnergy, referrals, quests);
+        syncWithBackend(score, newSpent, newEnergy, referrals, quests);
         
         alert(`Success! You bought ${item.name}`);
       }
@@ -516,7 +514,7 @@ const App: React.FC = () => {
                                      const newQuests = (quests || []).map(q => q.id === quest.id ? {...q, rewardClaimed: true} : q);
                                      setQuests(newQuests);
                                      saveProgress({ address: wallet?.account.address, score: newScore, questId: quest.id });
-                                     syncWithFirebase(newScore, spent, energy, referrals, newQuests);
+                                     syncWithBackend(newScore, spent, energy, referrals, newQuests);
                                  }} className="bg-green-500 text-white px-2 py-1 text-[8px] rounded animate-pulse">CLAIM</button>
                              ) : quest.rewardClaimed ? (
                                  <span className="text-gray-500 text-[8px]">DONE</span>
