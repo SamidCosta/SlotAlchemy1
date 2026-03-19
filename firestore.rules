@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: walletAddress or guestId
+    // Fields:
+    //   - userId: string (required)
+    //   - walletAddress: string (optional) - TON wallet address
+    //   - score: number (required) - Cumulative score
+    //   - spent: number (required) - Total TON spent
+    //   - energy: number (optional) - Current energy
+    //   - referrals: number (optional) - Number of referrals
+    //   - level: number (optional) - User level
+    //   - lastActive: number (required) - Last active timestamp (ms)
+    //   - quests: map (optional) - Completed quests
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isValidUserMetrics(data) {
+      return data.keys().hasAll(['userId', 'score', 'spent', 'lastActive']) &&
+             data.userId is string &&
+             data.score is number &&
+             data.spent is number &&
+             data.lastActive is number &&
+             (!('walletAddress' in data) || data.walletAddress == null || data.walletAddress is string) &&
+             (!('energy' in data) || data.energy is number) &&
+             (!('referrals' in data) || data.referrals is number) &&
+             (!('level' in data) || data.level is number) &&
+             (!('quests' in data) || data.quests is map);
+    }
+
+    match /users/{userId} {
+      // Allowing unauthenticated access for now since we're using TonConnect for identity
+      // and Firebase Auth is currently restricted in this project.
+      allow read: if true;
+      allow create, update: if isValidUserMetrics(request.resource.data);
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

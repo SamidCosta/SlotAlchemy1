@@ -1,0 +1,364 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Slot Alchemy</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <style>
+      /* Global box-sizing for predictable layout behavior */
+      *, *::before, *::after {
+          box-sizing: border-box;
+      }
+      body {
+          font-family: 'Press Start 2P', cursive;
+          background-image: url('https://imgur.com/HDRPwHE.png');
+          background-size: cover;
+          background-position: center;
+          background-attachment: fixed;
+          background-color: #111827;
+          color: #fff;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          min-height: 100vh;
+          margin: 0;
+          position: relative;
+          image-rendering: pixelated;
+          overflow: hidden;
+      }
+      /* Styles for the main game container */
+      .game-container {
+          width: 100%;
+          max-width: 400px;
+          min-width: 320px;
+          height: 100vh;
+          max-height: 800px;
+          background-image: url('https://imgur.com/BBYp9wq.png');
+          background-size: cover;
+          background-position: center;
+          box-shadow: 0 0 20px rgba(0, 0, 0, 0.7);
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          z-index: 1;
+      }
+      .game-container::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          border-left: 5px solid rgba(10, 10, 10, 0.8);
+          border-right: 5px solid rgba(10, 10, 10, 0.8);
+          z-index: -1;
+      }
+      .game-container::after {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: rgba(0, 0, 0, 0.3);
+          z-index: 1;
+          pointer-events: none;
+      }
+      .pixel-text {
+          text-shadow: 2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;
+      }
+      
+      /* Slot Machine Styles */
+      .slot-machine {
+          background-image: url('https://imgur.com/BBYp9wq.png');
+          background-size: 300%;
+          background-position: center;
+          border: 3px solid #0a0a0a;
+          padding: 10px;
+          border-radius: 10px;
+          box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+          position: relative;
+          z-index: 2;
+          width: 100%;
+          max-width: 300px;
+          min-width: 280px;
+      }
+      .slot-machine::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: rgba(0, 0, 0, 0.6);
+          z-index: -1;
+      }
+      .slot-window {
+          background-color: #1a1a1a;
+          border: 2px solid #546c8b;
+          padding: 8px;
+          border-radius: 8px;
+          box-shadow: inset 0 0 5px rgba(0,0,0,0.5);
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 8px;
+      }
+      .slot-reel-container {
+          background-color: rgba(0, 0, 0, 0.5);
+          border: 2px solid #3d4a5c;
+          overflow: hidden;
+          position: relative;
+          height: 100px;
+          border-radius: 5px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+      }
+      .slot-symbol {
+          width: 100%;
+          height: 100px;
+          object-fit: contain;
+          image-rendering: pixelated;
+      }
+
+      /* Animations & Assets */
+      .torch {
+          height: 64px;
+          width: auto;
+          image-rendering: pixelated;
+          flex-shrink: 0;
+      }
+      .top-animation-container {
+          position: absolute;
+          top: 0.5rem;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 260px;
+          height: 220px;
+          z-index: 10;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          pointer-events: none;
+      }
+      .top-animation-image {
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+          image-rendering: pixelated;
+      }
+
+      /* COIN SEQUENCE ANIMATION - OPTIMIZED */
+      .coin-animation-container {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: calc(100% - 80px); /* Descontando a altura do menu inferior */
+          z-index: 2000;
+          pointer-events: none;
+          display: flex;
+          justify-content: center;
+          align-items: flex-end; /* Alinha os frames na base do container */
+          backface-visibility: hidden;
+          perspective: 1000px;
+      }
+
+      .coin-animation-container img {
+          width: 100%;
+          height: auto;
+          max-width: 400px;
+          image-rendering: pixelated;
+          transform: scale(1.8) translate3d(0, 0, 0); /* Aceleração de hardware */
+          transform-origin: bottom center;
+          will-change: transform;
+      }
+
+      /* Bars */
+      .score-bar-container {
+          width: 100%;
+          background-color: rgba(180, 130, 40, 0.4);
+          border: 2px solid #8B4513;
+          border-radius: 8px;
+          height: 24px;
+          overflow: hidden;
+          box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
+          position: relative;
+          margin-top: 60px;
+          max-width: 300px;
+      }
+      .score-bar-fill {
+          height: 100%;
+          background-image: linear-gradient(to right, #DAA520, #FFD700);
+          border-radius: 6px;
+          transition: width 0.5s ease-in-out;
+          box-shadow: 0 0 5px #DAA520;
+      }
+      .energy-bar-container {
+          width: 100%;
+          background-color: rgba(64, 180, 170, 0.4);
+          border: 2px solid #28a745;
+          border-radius: 8px;
+          height: 24px;
+          overflow: hidden;
+          box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
+          position: relative;
+          max-width: 300px;
+      }
+      .energy-bar-fill {
+          height: 100%;
+          background-image: linear-gradient(to right, #34d399, #10b981);
+          border-radius: 6px;
+          transition: width 0.3s ease-in-out;
+      }
+      .bar-text-overlay {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          color: #1a1a1a;
+          font-weight: bold;
+          font-size: 10px;
+          text-shadow: 1px 1px 0px #fff;
+          z-index: 1;
+      }
+
+      /* Menu & UI */
+      .bottom-menu-bar {
+          background-image: url('https://imgur.com/BBYp9wq.png');
+          background-size: 1500px;
+          border-top: 2px solid #0a0a0a;
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          padding: 0.5rem;
+          z-index: 1000;
+          display: flex;
+          justify-content: space-around;
+          align-items: center;
+          height: 80px;
+          min-height: 80px;
+      }
+      .menu-icon {
+          filter: drop-shadow(0 2px 2px #000);
+          transition: transform 0.2s ease;
+      }
+      .menu-icon:hover {
+          transform: scale(1.1);
+      }
+      .screen-background {
+          background-image: url('https://imgur.com/BBYp9wq.png');
+          background-size: cover;
+          background-position: center;
+          background-color: rgba(0, 0, 0, 0.5);
+      }
+      
+      /* Modals */
+      .modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background-color: rgba(0, 0, 0, 0.7);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          z-index: 2000;
+          opacity: 0;
+          visibility: hidden;
+          transition: opacity 0.3s, visibility 0.3s;
+      }
+      .modal-overlay.show {
+          opacity: 1;
+          visibility: visible;
+      }
+      .modal-content {
+          background-image: url('https://imgur.com/BBYp9wq.png');
+          background-size: cover;
+          background-position: center;
+          border: 4px solid #DAA520;
+          border-radius: 12px;
+          box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+          width: 90%;
+          max-width: 400px;
+          padding: 2rem;
+          position: relative;
+      }
+      .quest-item {
+          display: flex;
+          flex-direction: row;
+          align-items: center;
+          gap: 1rem;
+          background-color: rgba(0, 0, 0, 0.4);
+          padding: 0.5rem;
+          border-radius: 8px;
+          border: 2px solid rgba(255, 255, 255, 0.2);
+          height: 60px;
+          min-height: 60px;
+      }
+      .shop-item {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+          background-color: rgba(0, 0, 0, 0.4);
+          padding: 0.5rem;
+          border-radius: 8px;
+          border: 2px solid rgba(255, 255, 255, 0.2);
+          cursor: pointer;
+      }
+      .shop-item:hover {
+          transform: translateY(-5px);
+          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+      }
+      .shop-icon {
+        width: 140px;
+        height: auto;
+        image-rendering: pixelated;
+        transform: scale(1.3);
+      }
+      @media (max-width: 480px) {
+          .game-container {
+              min-width: 100vw;
+              max-width: 100vw;
+          }
+          .slot-machine {
+              min-width: 260px;
+              max-width: 90vw;
+          }
+          .torch {
+              height: 48px;
+          }
+          .shop-icon {
+              width: 90px;
+              transform: scale(1);
+          }
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+    "@tonconnect/ui-react": "https://aistudiocdn.com/@tonconnect/ui-react@^2.3.1",
+    "react/": "https://aistudiocdn.com/react@^19.2.1/",
+    "axios": "https://aistudiocdn.com/axios@^1.13.2",
+    "express": "https://aistudiocdn.com/express@^5.2.1",
+    "cors": "https://aistudiocdn.com/cors@^2.8.5"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+{
+  "entities": {
+    "UserMetrics": {
+      "title": "User Metrics",
+      "description": "Stores user game metrics for TGE rewards.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The unique ID of the user (wallet or guest)."
+        },
+        "walletAddress": {
+          "type": "string",
+          "description": "The TON wallet address of the user."
+        },
+        "score": {
+          "type": "number",
+          "description": "Cumulative score/points earned."
+        },
+        "spent": {
+          "type": "number",
+          "description": "Total TON spent in the shop."
+        },
+        "energy": {
+          "type": "number",
+          "description": "Current energy level."
+        },
+        "referrals": {
+          "type": "number",
+          "description": "Number of successful referrals."
+        },
+        "level": {
+          "type": "number",
+          "description": "User level."
+        },
+        "lastActive": {
+          "type": "number",
+          "description": "Timestamp of the last active session (ms)."
+        },
+        "quests": {
+          "type": "object",
+          "description": "Map of completed quest IDs."
+        }
+      },
+      "required": ["userId", "score", "spent", "lastActive"]
+    }
+  },
+  "firestore": {
+    "users/{walletAddress}": {
+      "schema": "UserMetrics",
+      "description": "Collection of user metrics indexed by wallet address."
+    }
+  }
+}
