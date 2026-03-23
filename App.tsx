@@ -115,18 +115,70 @@ const App: React.FC = () => {
   // Background Music
   useEffect(() => {
     if (!musicRef.current) {
-        musicRef.current = new Audio(BACKGROUND_MUSIC_URL);
-        musicRef.current.loop = true;
-        musicRef.current.volume = 0.25;
+        console.log("Initializing background music with URL:", BACKGROUND_MUSIC_URL);
+        const audio = new Audio(BACKGROUND_MUSIC_URL);
+        audio.loop = true;
+        audio.volume = 0.25;
+        
+        // Skip the first 5 seconds of silence when metadata is loaded
+        const handleCanPlay = () => {
+            if (audio.currentTime < 5) {
+                console.log("Music can play, setting currentTime to 5");
+                audio.currentTime = 5;
+            }
+            audio.removeEventListener('canplay', handleCanPlay);
+        };
+        audio.addEventListener('canplay', handleCanPlay);
+        
+        audio.onerror = (e) => {
+            console.error("Background music error:", e);
+        };
+        
+        musicRef.current = audio;
     }
   }, []);
 
   useEffect(() => {
     if (!musicRef.current) return;
+    
+    const music = musicRef.current;
+    console.log("Music effect triggered: isMusicEnabled=", isMusicEnabled, "loading=", loading);
+
     if (isMusicEnabled && !loading) {
-        musicRef.current.play().catch(() => {});
+        const attemptPlay = () => {
+            console.log("Attempting to play music...");
+            music.play().then(() => {
+                console.log("Music playing successfully");
+            }).catch((err) => {
+                console.log("Autoplay blocked or failed:", err.message);
+            });
+        };
+
+        attemptPlay();
+        
+        // Add a one-time listener to the document to catch the first interaction
+        const handleFirstInteraction = () => {
+            if (isMusicEnabled && music.paused) {
+                console.log("First interaction detected, starting music");
+                music.play().catch((err) => console.log("Interaction play failed:", err.message));
+            }
+            document.removeEventListener('click', handleFirstInteraction);
+            document.removeEventListener('touchstart', handleFirstInteraction);
+            document.removeEventListener('keydown', handleFirstInteraction);
+        };
+        
+        document.addEventListener('click', handleFirstInteraction);
+        document.addEventListener('touchstart', handleFirstInteraction);
+        document.addEventListener('keydown', handleFirstInteraction);
+        
+        return () => {
+            document.removeEventListener('click', handleFirstInteraction);
+            document.removeEventListener('touchstart', handleFirstInteraction);
+            document.removeEventListener('keydown', handleFirstInteraction);
+        };
     } else {
-        musicRef.current.pause();
+        console.log("Pausing music: isMusicEnabled=", isMusicEnabled, "loading=", loading);
+        music.pause();
     }
   }, [isMusicEnabled, loading]);
 
@@ -143,14 +195,20 @@ const App: React.FC = () => {
 
   const playClick = useCallback(() => {
     if (isSoundEnabled) {
-      new Audio(CLICK_SOUND_URL).play().catch(() => {});
+      console.log("Playing click sound");
+      new Audio(CLICK_SOUND_URL).play().catch(e => console.log("Click sound blocked:", e.message));
     }
   }, [isSoundEnabled]);
 
   const startSpinSound = useCallback(() => {
     if (isSoundEnabled && spinAudioRef.current) {
+      console.log("Starting spin sound");
       spinAudioRef.current.currentTime = 0;
-      spinAudioRef.current.play().catch(e => console.log("Audio play blocked", e));
+      spinAudioRef.current.play().then(() => {
+        console.log("Spin sound playing");
+      }).catch(e => console.log("Spin sound play blocked or failed:", e.message));
+    } else {
+      console.log("Spin sound not started: isSoundEnabled=", isSoundEnabled, "spinAudioRef.current=", !!spinAudioRef.current);
     }
   }, [isSoundEnabled]);
 
@@ -278,23 +336,27 @@ const App: React.FC = () => {
     if (maxCount === 3) {
         winAmount = spinResults[0].value * 10;
         setWinAnimFrame(0);
-        setCoinAnimFrame(0); // Chuva de moedas agora só no Jackpot
         if (isSoundEnabled) {
           // Play Jackpot sound for 3 matches
-          new Audio(JACKPOT_SOUND_BASE64).play().catch(() => {});
+          console.log("Playing Jackpot sound");
+          new Audio(JACKPOT_SOUND_BASE64).play().catch(e => console.log("Jackpot sound blocked:", e.message));
         }
     } else if (maxCount === 2) {
          const match = spinResults.find(s => counts[s.name] === 2);
          if (match) winAmount = match.value * 5;
          if (isSoundEnabled) {
            // Play new Win sound for 2 matches
-           new Audio(WIN_SOUND_URL).play().catch(() => {});
+           console.log("Playing Win sound");
+           new Audio(WIN_SOUND_URL).play().catch(e => console.log("Win sound blocked:", e.message));
          }
     }
 
     if (winAmount > 0) {
         const totalWin = winAmount * multiplier;
-        // setCoinAnimFrame(0); // Removido daqui para não tocar em vitórias de 2 símbolos
+        setCoinAnimFrame(0); // Chuva de moedas em qualquer vitória
+        if (isSoundEnabled) {
+            new Audio(COIN_SOUND_URL).play().catch(e => console.log("Coin sound blocked:", e.message));
+        }
         setScore(prev => {
           const newScore = prev + totalWin;
           syncWithBackend(newScore, spent, energy, referrals, quests);
@@ -604,6 +666,30 @@ const App: React.FC = () => {
                              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${isMusicEnabled ? 'left-7' : 'left-1'}`}></div>
                          </button>
                      </div>
+
+                     <button 
+                        onClick={() => {
+                            console.log("Testing all sounds...");
+                            const sounds = [
+                                { name: "Click", url: CLICK_SOUND_URL },
+                                { name: "Spin", url: SPIN_SOUND_URL },
+                                { name: "Win", url: WIN_SOUND_URL },
+                                { name: "Coin", url: COIN_SOUND_URL },
+                                { name: "Jackpot", url: JACKPOT_SOUND_BASE64 },
+                                { name: "Music", url: BACKGROUND_MUSIC_URL }
+                            ];
+                            sounds.forEach(s => {
+                                const a = new Audio(s.url);
+                                a.volume = 0.5;
+                                a.play()
+                                    .then(() => console.log(`Test: ${s.name} played successfully`))
+                                    .catch(err => console.error(`Test: ${s.name} failed:`, err.message));
+                            });
+                        }}
+                        className="mt-4 p-2 bg-blue-600 rounded text-[10px] pixel-text hover:bg-blue-500 transition-colors w-full"
+                      >
+                        TEST AUDIO (DEBUG)
+                      </button>
                  </div>
              </div>
         </div>
