@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useTonConnectUI, useTonWallet } from '@tonconnect/ui-react';
 import { checkProof, getAccountInfo, saveProgress, getTonConnectPayload, getLeaderboard } from './services/api';
-import { SYMBOLS, SHOP_ITEMS, DAILY_QUESTS, POINTS_NEEDED, TORCH_FRAMES, TOP_ANIMATION_FRAMES, WIN_ANIMATION_FRAMES, COIN_FRAMES, CLICK_SOUND_URL, WIN_SOUND_URL, COIN_SOUND_URL, SPIN_SOUND_BASE64, BACKGROUND_MUSIC_URL, DESTINATION_WALLET, JACKPOT_SOUND_BASE64 } from './constants';
+import { SYMBOLS, SHOP_ITEMS, DAILY_QUESTS, POINTS_NEEDED, TORCH_FRAMES, TOP_ANIMATION_FRAMES, WIN_ANIMATION_FRAMES, COIN_FRAMES, CLICK_SOUND_URL, WIN_SOUND_URL, COIN_SOUND_URL, SPIN_SOUND_URL, BACKGROUND_MUSIC_URL, DESTINATION_WALLET, JACKPOT_SOUND_BASE64 } from './constants';
 import { GameScreen, LeaderboardCategory, LeaderboardEntry, ShopItem } from './types';
 import { SlotReel } from './components/SlotReel';
 
@@ -94,10 +94,16 @@ const App: React.FC = () => {
 
   // Preload assets and audio
   useEffect(() => {
-    const spinAudio = new Audio(SPIN_SOUND_BASE64);
+    const spinAudio = new Audio(SPIN_SOUND_URL);
     spinAudio.preload = 'auto';
     spinAudio.loop = false; 
     spinAudioRef.current = spinAudio;
+
+    // Preload win sounds
+    [WIN_SOUND_URL, JACKPOT_SOUND_BASE64, CLICK_SOUND_URL].forEach(url => {
+      const audio = new Audio(url);
+      audio.preload = 'auto';
+    });
 
     const allImages = [...COIN_FRAMES, ...WIN_ANIMATION_FRAMES, ...TOP_ANIMATION_FRAMES, ...TORCH_FRAMES];
     allImages.forEach((src) => {
@@ -268,23 +274,27 @@ const App: React.FC = () => {
     spinResults.forEach(s => counts[s.name] = (counts[s.name] || 0) + 1);
     let winAmount = 0;
     const maxCount = Math.max(...Object.values(counts));
+    
     if (maxCount === 3) {
         winAmount = spinResults[0].value * 10;
         setWinAnimFrame(0);
+        setCoinAnimFrame(0); // Chuva de moedas agora só no Jackpot
         if (isSoundEnabled) {
-          const jackpotAudio = new Audio(JACKPOT_SOUND_BASE64);
-          jackpotAudio.volume = 0.8;
-          jackpotAudio.play().catch(() => {});
+          // Play Jackpot sound for 3 matches
+          new Audio(JACKPOT_SOUND_BASE64).play().catch(() => {});
         }
     } else if (maxCount === 2) {
          const match = spinResults.find(s => counts[s.name] === 2);
          if (match) winAmount = match.value * 5;
-         if (isSoundEnabled) new Audio(WIN_SOUND_URL).play().catch(() => {});
+         if (isSoundEnabled) {
+           // Play new Win sound for 2 matches
+           new Audio(WIN_SOUND_URL).play().catch(() => {});
+         }
     }
+
     if (winAmount > 0) {
         const totalWin = winAmount * multiplier;
-        setCoinAnimFrame(0);
-        if (isSoundEnabled) new Audio(COIN_SOUND_URL).play().catch(() => {});
+        // setCoinAnimFrame(0); // Removido daqui para não tocar em vitórias de 2 símbolos
         setScore(prev => {
           const newScore = prev + totalWin;
           syncWithBackend(newScore, spent, energy, referrals, quests);

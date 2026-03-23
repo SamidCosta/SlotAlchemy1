@@ -24,7 +24,11 @@ if (!MONGODB_URI) {
 
 mongoose.connect(MONGODB_URI)
   .then(() => console.log('Connected to MongoDB Atlas'))
-  .catch(err => console.error('MongoDB connection error:', err));
+  .catch(err => {
+    console.error('MongoDB connection error:', err);
+    console.error('Please ensure MONGODB_URI is correctly set in your environment variables.');
+    console.error('If you see ENOTFOUND, check for typos in your connection string.');
+  });
 
 // User Schema
 const userSchema = new mongoose.Schema({
