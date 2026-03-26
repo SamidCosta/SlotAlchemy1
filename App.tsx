@@ -30,6 +30,7 @@ const App: React.FC = () => {
   const [coinAnimFrame, setCoinAnimFrame] = useState(-1);
   const [isSoundEnabled, setIsSoundEnabled] = useState(true);
   const [isMusicEnabled, setIsMusicEnabled] = useState(true);
+  const [energyRechargeTime, setEnergyRechargeTime] = useState<string | null>(null);
 
   // Modal States
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
@@ -50,6 +51,31 @@ const App: React.FC = () => {
   const longPressTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ignoreNextClick = useRef(false);
   const isHolding = useRef(false);
+
+  // Local Energy Recharge
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setEnergy(prev => {
+        if (prev >= 100) {
+            setEnergyRechargeTime(null);
+            return prev;
+        }
+        
+        const rechargeRate = 100 / (12 * 60 * 60); // 100 units per 12 hours (per second)
+        const newEnergy = Math.min(100, prev + rechargeRate);
+        
+        // Calculate time to full
+        const secondsToFull = (100 - newEnergy) / rechargeRate;
+        const h = Math.floor(secondsToFull / 3600);
+        const m = Math.floor((secondsToFull % 3600) / 60);
+        const s = Math.floor(secondsToFull % 60);
+        setEnergyRechargeTime(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
+        
+        return newEnergy;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Sync with Backend
   const syncWithBackend = useCallback((currentScore: number, currentSpent: number, currentEnergy: number, currentReferrals: number, currentQuests: any[]) => {
@@ -498,42 +524,48 @@ const App: React.FC = () => {
 
         <div className="flex-grow w-full overflow-hidden relative z-10">
             {/* GAME SCREEN */}
-            <div className={`absolute w-full h-full p-4 transition-transform duration-500 ease-in-out flex flex-col items-center justify-end ${currentScreen === GameScreen.GAME ? 'translate-x-0' : 'translate-x-full'}`}>
+            <div className={`absolute w-full h-full p-4 transition-transform duration-500 ease-in-out flex flex-col items-center ${currentScreen === GameScreen.GAME ? 'translate-x-0' : 'translate-x-full'}`}>
                 <div className="top-animation-container">
                     <img src={TOP_ANIMATION_FRAMES[topAnimFrame]} alt="Anim" className="top-animation-image" />
+                    {winAnimFrame >= 0 && (
+                        <img src={WIN_ANIMATION_FRAMES[winAnimFrame]} alt="Win" className="top-animation-image absolute top-0 left-0 z-20" />
+                    )}
                 </div>
-                {winAnimFrame >= 0 && (
-                    <div className="top-animation-container" style={{ zIndex: 20 }}>
-                         <img src={WIN_ANIMATION_FRAMES[winAnimFrame]} alt="Win" className="top-animation-image absolute top-0 left-0" />
-                    </div>
-                )}
+
                 {coinAnimFrame >= 0 && (
                     <div className="coin-animation-container">
                         <img src={COIN_FRAMES[coinAnimFrame]} alt="Moedas" />
                     </div>
                 )}
 
-                <div className="score-bar-container">
-                    <div className="score-bar-fill" style={{ width: `${getProgressBarWidth()}%` }}></div>
-                    <span className="bar-text-overlay pixel-text">{Math.floor(score)} / {progression.goal}</span>
-                </div>
+                <div className="flex-grow flex flex-col items-center justify-center w-full">
+                    <div className="score-bar-container">
+                        <div className="score-bar-fill" style={{ width: `${getProgressBarWidth()}%` }}></div>
+                        <span className="bar-text-overlay pixel-text">{Math.floor(score)} / {progression.goal}</span>
+                    </div>
 
-                <div className="flex flex-col items-center gap-2 w-full px-4 mt-4">
-                    <div className="slot-machine">
-                        <div className="slot-window">
-                            <SlotReel index={0} spinning={isSpinning} finalSymbol={spinResults[0]} onFinish={onReelFinish} />
-                            <SlotReel index={1} spinning={isSpinning} finalSymbol={spinResults[1]} onFinish={onReelFinish} />
-                            <SlotReel index={2} spinning={isSpinning} finalSymbol={spinResults[2]} onFinish={onReelFinish} />
+                    <div className="flex flex-col items-center gap-2 w-full px-4 mt-4">
+                        <div className="slot-machine">
+                            <div className="slot-window">
+                                <SlotReel index={0} spinning={isSpinning} finalSymbol={spinResults[0]} onFinish={onReelFinish} />
+                                <SlotReel index={1} spinning={isSpinning} finalSymbol={spinResults[1]} onFinish={onReelFinish} />
+                                <SlotReel index={2} spinning={isSpinning} finalSymbol={spinResults[2]} onFinish={onReelFinish} />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="energy-bar-container mt-4">
+                        <div className="energy-bar-fill" style={{ width: `${Math.min(100, energy)}%` }}></div>
+                        <div className="bar-text-overlay pixel-text flex flex-col items-center justify-center leading-none">
+                            <span>{Math.floor(energy)} / 100</span>
+                            {Math.floor(energy) === 0 && energyRechargeTime && (
+                                <span className="text-[8px] text-yellow-400 mt-0.5">{energyRechargeTime}</span>
+                            )}
                         </div>
                     </div>
                 </div>
 
-                <div className="energy-bar-container mt-4">
-                    <div className="energy-bar-fill" style={{ width: `${energy}%` }}></div>
-                    <span className="bar-text-overlay pixel-text">{energy} / 100</span>
-                </div>
-
-                <div className="flex flex-col items-center mt-8 z-50 mb-20">
+                <div className="flex flex-col items-center mt-4 z-50 mb-20 flex-shrink-0">
                     <button onClick={(e) => { e.stopPropagation(); playClick(); setMultiplier(m => m >= 5 ? 1 : m + 2); }} className="bg-purple-600 text-white px-3 py-1 rounded-lg text-sm mb-2 hover:bg-purple-500 transition-colors">
                         {multiplier}x
                     </button>
@@ -606,10 +638,10 @@ const App: React.FC = () => {
                  <div className="mt-8 p-4 bg-black/40 rounded-lg w-full max-w-sm">
                      <p className="text-[10px] mb-2">Share your link:</p>
                      <div className="p-2 bg-gray-700 rounded-md flex justify-between items-center text-[10px] truncate">
-                         {`https://t.me/SlotBot?start=${wallet?.account.address?.slice(0,8) || 'guest'}`}
+                         {`https://t.me/SlotAlchemyCryptoBot/playSlot?startapp=${wallet?.account.address?.slice(0,8) || 'guest'}`}
                          <i className="fa-solid fa-copy text-blue-400 ml-2 cursor-pointer" onClick={(e) => {
                              e.stopPropagation(); playClick();
-                             navigator.clipboard.writeText(`https://t.me/SlotBot?start=${wallet?.account.address || 'guest'}`);
+                             navigator.clipboard.writeText(`https://t.me/SlotAlchemyCryptoBot/playSlot?startapp=${wallet?.account.address || 'guest'}`);
                          }}></i>
                      </div>
                  </div>

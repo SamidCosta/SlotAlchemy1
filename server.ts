@@ -38,6 +38,7 @@ const userSchema = new mongoose.Schema({
   referrals: { type: Number, default: 0 },
   spent: { type: Number, default: 0 },
   energy: { type: Number, default: 100 },
+  lastEnergyUpdate: { type: Number, default: Date.now },
   level: { type: Number, default: 1 },
   lastActive: { type: Number, default: Date.now },
   quests: { type: Map, of: Boolean, default: {} }
@@ -49,6 +50,20 @@ const User = mongoose.model('User', userSchema);
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: Date.now() });
 });
+
+const MAX_ENERGY = 100;
+const RECHARGE_RATE = 100 / (12 * 60 * 60 * 1000); // 100 units per 12 hours
+
+function calculateRechargedEnergy(user) {
+  const now = Date.now();
+  if (user.energy >= MAX_ENERGY) return { energy: user.energy, lastEnergyUpdate: now };
+  
+  const elapsed = now - (user.lastEnergyUpdate || user.lastActive || now);
+  const recharged = elapsed * RECHARGE_RATE;
+  const newEnergy = Math.min(MAX_ENERGY, user.energy + recharged);
+  
+  return { energy: newEnergy, lastEnergyUpdate: now };
+}
 
 // API Routes
 app.get('/api/tonconnect/payload', (req, res) => {
@@ -64,8 +79,13 @@ app.get('/api/me', async (req, res) => {
     let user = await User.findOne({ userId: id });
     
     if (user) {
+      const { energy, lastEnergyUpdate } = calculateRechargedEnergy(user);
+      user.energy = energy;
+      user.lastEnergyUpdate = lastEnergyUpdate;
+      await user.save();
       res.json(user);
     } else {
+      const now = Date.now();
       user = new User({
         userId: id,
         walletAddress: address || null,
@@ -73,8 +93,9 @@ app.get('/api/me', async (req, res) => {
         referrals: 0,
         spent: 0,
         energy: 100,
+        lastEnergyUpdate: now,
         level: 1,
-        lastActive: Date.now(),
+        lastActive: now,
         quests: {}
       });
       await user.save();
@@ -90,10 +111,14 @@ app.post('/api/save-progress', async (req, res) => {
   const id = address ? `wallet_${address}` : (guestId as string || 'anonymous');
   
   try {
-    const updateData: any = { lastActive: Date.now() };
+    const now = Date.now();
+    const updateData: any = { lastActive: now };
     if (score !== undefined) updateData.score = score;
     if (level !== undefined) updateData.level = level;
-    if (energy !== undefined) updateData.energy = energy;
+    if (energy !== undefined) {
+        updateData.energy = energy;
+        updateData.lastEnergyUpdate = now;
+    }
     if (referrals !== undefined) updateData.referrals = referrals;
     if (spent !== undefined) updateData.spent = spent;
     
@@ -114,9 +139,10 @@ app.post('/api/save-progress', async (req, res) => {
         score: score || 0,
         referrals: referrals || 0,
         spent: spent || 0,
-        energy: energy || 100,
+        energy: energy !== undefined ? energy : 100,
+        lastEnergyUpdate: now,
         level: level || 1,
-        lastActive: Date.now(),
+        lastActive: now,
         quests: questId ? { [questId]: true } : {}
       });
       await newUser.save();

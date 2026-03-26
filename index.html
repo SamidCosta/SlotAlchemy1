@@ -134,17 +134,17 @@
           flex-shrink: 0;
       }
       .top-animation-container {
-          position: absolute;
-          top: 0.5rem;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 260px;
-          height: 220px;
+          position: relative;
+          width: 100%;
+          max-width: 260px;
+          height: 180px;
+          margin-top: 1rem;
           z-index: 10;
           display: flex;
           justify-content: center;
           align-items: center;
           pointer-events: none;
+          flex-shrink: 0;
       }
       .top-animation-image {
           width: 100%;
@@ -189,8 +189,9 @@
           overflow: hidden;
           box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
           position: relative;
-          margin-top: 60px;
+          margin-top: 0.5rem;
           max-width: 300px;
+          flex-shrink: 0;
       }
       .score-bar-fill {
           height: 100%;

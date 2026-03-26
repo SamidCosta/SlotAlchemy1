@@ -32,7 +32,7 @@ root.render(
     <TonConnectUIProvider 
       manifestUrl={MANIFEST_URL}
       actionsConfiguration={{
-        twaReturnUrl: 'https://t.me/SlotBot'
+        twaReturnUrl: 'https://t.me/SlotAlchemyCryptoBot/playSlot'
       }}
       enableAndroidCustomScheme={true}
     >
