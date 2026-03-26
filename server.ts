@@ -18,17 +18,16 @@ app.use(express.json());
 const MONGODB_URI = process.env.MONGODB_URI;
 
 if (!MONGODB_URI) {
-  console.error('MONGODB_URI environment variable is not set.');
-  process.exit(1);
+  console.error('CRITICAL: MONGODB_URI environment variable is not set.');
+  console.error('Leaderboard and persistence will not work. Running in OFFLINE mode.');
+} else {
+  mongoose.connect(MONGODB_URI)
+    .then(() => console.log('Connected to MongoDB Atlas'))
+    .catch(err => {
+      console.error('MongoDB connection error:', err);
+      console.error('Please ensure MONGODB_URI is correctly set in your environment variables.');
+    });
 }
-
-mongoose.connect(MONGODB_URI)
-  .then(() => console.log('Connected to MongoDB Atlas'))
-  .catch(err => {
-    console.error('MongoDB connection error:', err);
-    console.error('Please ensure MONGODB_URI is correctly set in your environment variables.');
-    console.error('If you see ENOTFOUND, check for typos in your connection string.');
-  });
 
 // User Schema
 const userSchema = new mongoose.Schema({
@@ -155,6 +154,7 @@ app.post('/api/save-progress', async (req, res) => {
 
 app.get('/api/leaderboard', async (req, res) => {
   const { type, address } = req.query;
+  const userAddress = (address as string)?.toLowerCase();
   
   try {
     const sortField = type as string || 'score';
@@ -164,14 +164,31 @@ app.get('/api/leaderboard', async (req, res) => {
       rank: index + 1,
       name: u.walletAddress ? `${u.walletAddress.slice(0, 4)}...${u.walletAddress.slice(-4)}` : `Guest_${u.userId.slice(-4)}`,
       value: type === 'referrals' ? u.referrals : (type === 'spent' ? u.spent : u.score),
-      isCurrentUser: u.walletAddress === address
+      isCurrentUser: u.walletAddress?.toLowerCase() === userAddress
     }));
+
+    let currentUserEntry = rankedList.find(u => u.isCurrentUser);
+
+    // Se o usuário não estiver no top 50, vamos buscar a posição real dele
+    if (!currentUserEntry && userAddress) {
+      const user = await User.findOne({ walletAddress: { $regex: new RegExp(`^${userAddress}$`, 'i') } });
+      if (user) {
+        const count = await User.countDocuments({ [sortField]: { $gt: user[sortField as keyof typeof user] } });
+        currentUserEntry = {
+          rank: count + 1,
+          name: `${user.walletAddress!.slice(0, 4)}...${user.walletAddress!.slice(-4)}`,
+          value: type === 'referrals' ? user.referrals : (type === 'spent' ? user.spent : user.score),
+          isCurrentUser: true
+        };
+      }
+    }
 
     res.json({
       list: rankedList,
-      currentUserEntry: rankedList.find(u => u.isCurrentUser) || { rank: 999, name: 'You', value: 0, isCurrentUser: true }
+      currentUserEntry: currentUserEntry || null
     });
   } catch (e) {
+    console.error("Leaderboard Error:", e);
     res.status(500).json({ error: 'Failed to fetch leaderboard' });
   }
 });
@@ -182,7 +199,7 @@ const PORT = Number(process.env.PORT) || 3000;
 if (process.env.NODE_ENV === 'production') {
   const distPath = path.join(process.cwd(), 'dist');
   app.use(express.static(distPath));
-  app.get('*all', (req, res) => {
+  app.get('*', (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
   });
 }

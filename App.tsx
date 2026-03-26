@@ -40,12 +40,15 @@ const App: React.FC = () => {
   // Leaderboard State
   const [leaderboardTab, setLeaderboardTab] = useState<LeaderboardCategory>('points');
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
+  const [currentUserEntry, setCurrentUserEntry] = useState<LeaderboardEntry | null>(null);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
 
   const [tonConnectUI] = useTonConnectUI();
   const wallet = useTonWallet();
   const musicRef = useRef<HTMLAudioElement | null>(null);
   const spinAudioRef = useRef<HTMLAudioElement | null>(null);
+  const lastFetchedWallet = useRef<string | null>(null);
+  const isInitialLoad = useRef(true);
 
   // Refs para controle de Auto-Spin
   const longPressTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -214,6 +217,7 @@ const App: React.FC = () => {
       getLeaderboard(leaderboardTab, wallet?.account.address)
         .then(res => {
           setLeaderboardData(res?.list || []);
+          setCurrentUserEntry(res?.currentUserEntry || null);
         })
         .finally(() => setLoadingLeaderboard(false));
     }
@@ -295,6 +299,13 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const address = wallet?.account.address;
+    
+    // Evita chamadas redundantes se o endereço não mudou
+    if (!isInitialLoad.current && address === lastFetchedWallet.current) return;
+    
+    isInitialLoad.current = false;
+    lastFetchedWallet.current = address || null;
+
     getAccountInfo(address).then(res => {
         if(res.data) {
           setScore(res.data.score || 0);
@@ -310,7 +321,11 @@ const App: React.FC = () => {
              })));
           }
         }
-    }).finally(() => setTimeout(() => setLoading(false), 2000));
+    }).finally(() => {
+        if (loading) {
+            setTimeout(() => setLoading(false), 2000);
+        }
+    });
   }, [wallet]);
 
   const spin = useCallback(() => {
@@ -377,21 +392,20 @@ const App: React.FC = () => {
          }
     }
 
+    const totalWin = winAmount * multiplier;
+    const newScore = score + totalWin;
+
     if (winAmount > 0) {
-        const totalWin = winAmount * multiplier;
         setCoinAnimFrame(0); // Chuva de moedas em qualquer vitória
         if (isSoundEnabled) {
             new Audio(COIN_SOUND_URL).play().catch(e => console.log("Coin sound blocked:", e.message));
         }
-        setScore(prev => {
-          const newScore = prev + totalWin;
-          syncWithBackend(newScore, spent, energy, referrals, quests);
-          return newScore;
-        });
-    } else {
-        syncWithBackend(score, spent, energy, referrals, quests);
+        setScore(newScore);
     }
-    saveProgress({ address: wallet?.account.address, score, energy, level: progression.level });
+
+    syncWithBackend(newScore, spent, energy, referrals, quests);
+    saveProgress({ address: wallet?.account.address, score: newScore, energy, level: progression.level });
+    
     setTimeout(() => { setIsSpinning(false); }, 400);
   };
 
@@ -751,6 +765,21 @@ const App: React.FC = () => {
                                      <span className="text-[8px] text-yellow-300">{Math.floor(entry.value)}</span>
                                  </div>
                              ))}
+                             
+                             {currentUserEntry && !leaderboardData.some(e => e.rank === currentUserEntry.rank) && (
+                                 <>
+                                     <div className="flex justify-center py-1">
+                                         <div className="h-4 w-1 bg-yellow-700/30 rounded-full"></div>
+                                     </div>
+                                     <div className="flex items-center justify-between p-2 rounded bg-yellow-600/30 border border-yellow-500">
+                                         <div className="flex items-center gap-3">
+                                             <span className="text-[10px] w-6 text-yellow-400 font-bold">#{currentUserEntry.rank}</span>
+                                             <span className="text-[8px] pixel-text truncate max-w-[100px]">{currentUserEntry.name} (You)</span>
+                                         </div>
+                                         <span className="text-[8px] text-yellow-300">{Math.floor(currentUserEntry.value)}</span>
+                                     </div>
+                                 </>
+                             )}
                          </div>
                      )}
                  </div>
