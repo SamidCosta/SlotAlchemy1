@@ -3,7 +3,6 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { createServer as createViteServer } from 'vite';
 import mongoose from 'mongoose';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -199,7 +198,7 @@ const PORT = Number(process.env.PORT) || 3000;
 if (process.env.NODE_ENV === 'production') {
   const distPath = path.join(process.cwd(), 'dist');
   app.use(express.static(distPath));
-  app.get('*', (req, res) => {
+  app.get('*all', (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
   });
 }
@@ -212,6 +211,7 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
+  const { createServer: createViteServer } = await import('vite');
   async function startVite() {
     const vite = await createViteServer({
       server: { middlewareMode: true },
