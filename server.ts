@@ -20,10 +20,17 @@ if (!MONGODB_URI) {
   console.error('CRITICAL: MONGODB_URI environment variable is not set.');
   console.error('Leaderboard and persistence will not work. Running in OFFLINE mode.');
 } else {
+  if (MONGODB_URI.includes('<password>')) {
+    console.error('ERROR: Your MONGODB_URI still contains the "<password>" placeholder. Please replace it with your actual database password in the environment variables.');
+  }
+  
   mongoose.connect(MONGODB_URI)
     .then(() => console.log('Connected to MongoDB Atlas'))
     .catch(err => {
-      console.error('MongoDB connection error:', err);
+      console.error('MongoDB connection error:', err.message);
+      if (err.message.includes('authentication failed')) {
+        console.error('FIX: Your database username or password in MONGODB_URI is incorrect.');
+      }
       console.error('Please ensure MONGODB_URI is correctly set in your environment variables.');
     });
 }
