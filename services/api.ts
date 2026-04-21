@@ -56,11 +56,15 @@ export const checkProof = async (account: Account, proof: TonProofItemReplySucce
 
 export const getAccountInfo = async (address?: string) => {
   try {
-    const params: any = {};
+    const urlParams = new URLSearchParams(window.location.search);
+    const startParam = urlParams.get('start_param') || urlParams.get('startapp');
+    
+    const params: any = { guestId: getGuestId() };
     if (address) {
         params.address = address;
-    } else {
-        params.guestId = getGuestId();
+    }
+    if (startParam) {
+        params.referredBy = startParam;
     }
     return await axios.get(`${BACKEND_URL}/api/me`, { params });
   } catch (e) {
@@ -79,12 +83,7 @@ export const saveProgress = async (data: {
     questId?: string;
 }) => {
   try {
-    const payload = { ...data };
-    // If no wallet address, inject Guest ID
-    if (!payload.address) {
-        // @ts-ignore
-        payload.guestId = getGuestId();
-    }
+    const payload = { ...data, guestId: getGuestId() };
     return await axios.post(`${BACKEND_URL}/api/save-progress`, payload);
   } catch (e) {
     return { data: { success: true } };

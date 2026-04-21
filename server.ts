@@ -77,11 +77,33 @@ app.get('/api/tonconnect/payload', (req, res) => {
 });
 
 app.get('/api/me', async (req, res) => {
-  const { address, guestId } = req.query;
-  const id = address ? `wallet_${address}` : (guestId as string || 'anonymous');
+  const { address, guestId, referredBy } = req.query;
+  const userAddress = address ? (address as string).toLowerCase() : null;
+  const id = userAddress ? `wallet_${userAddress}` : (guestId as string || 'anonymous');
   
   try {
     let user = await User.findOne({ userId: id });
+    const isNewUser = !user;
+    
+    // Se conectou carteira e não existia usuário de carteira, mas existia de visitante, vamos migrar
+    if (isNewUser && userAddress && guestId) {
+      const guestUser = await User.findOne({ userId: guestId });
+      if (guestUser) {
+        user = new User({
+          userId: id,
+          walletAddress: userAddress,
+          score: guestUser.score,
+          referrals: guestUser.referrals,
+          spent: guestUser.spent,
+          energy: guestUser.energy,
+          lastEnergyUpdate: guestUser.lastEnergyUpdate,
+          level: guestUser.level,
+          lastActive: Date.now(),
+          quests: guestUser.quests
+        });
+        await user.save();
+      }
+    }
     
     if (user) {
       const { energy, lastEnergyUpdate } = calculateRechargedEnergy(user);
@@ -93,7 +115,7 @@ app.get('/api/me', async (req, res) => {
       const now = Date.now();
       user = new User({
         userId: id,
-        walletAddress: address || null,
+        walletAddress: userAddress,
         score: 0,
         referrals: 0,
         spent: 0,
@@ -103,17 +125,37 @@ app.get('/api/me', async (req, res) => {
         lastActive: now,
         quests: {}
       });
+
+      // Lógica de Referral: Se for um novo usuário e tiver um padrinho
+      if (referredBy && referredBy !== id) {
+        // Tenta encontrar o padrinho pelo userId ou walletAddress
+        const referrer = await User.findOne({ 
+          $or: [
+            { userId: referredBy },
+            { walletAddress: (referredBy as string).toLowerCase() }
+          ]
+        });
+
+        if (referrer) {
+          referrer.referrals = (referrer.referrals || 0) + 1;
+          await referrer.save();
+          console.log(`User ${id} referred by ${referredBy}`);
+        }
+      }
+
       await user.save();
       res.json(user);
     }
-  } catch (e) {
+  } catch (e: any) {
+    console.error("API /me Error:", e.message);
     res.status(500).json({ error: 'Failed to fetch user' });
   }
 });
 
 app.post('/api/save-progress', async (req, res) => {
   const { address, guestId, score, level, energy, referrals, spent, questId } = req.body;
-  const id = address ? `wallet_${address}` : (guestId as string || 'anonymous');
+  const userAddress = address ? (address as string).toLowerCase() : null;
+  const id = userAddress ? `wallet_${userAddress}` : (guestId as string || 'anonymous');
   
   try {
     const now = Date.now();
@@ -140,7 +182,7 @@ app.post('/api/save-progress', async (req, res) => {
     } else {
       const newUser = new User({
         userId: id,
-        walletAddress: address || null,
+        walletAddress: userAddress,
         score: score || 0,
         referrals: referrals || 0,
         spent: spent || 0,
@@ -153,7 +195,8 @@ app.post('/api/save-progress', async (req, res) => {
       await newUser.save();
       res.json({ success: true, user: newUser });
     }
-  } catch (e) {
+  } catch (e: any) {
+    console.error("API save-progress Error:", e.message);
     res.status(500).json({ error: 'Failed to save progress' });
   }
 });

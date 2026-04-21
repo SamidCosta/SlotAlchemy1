@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useTonConnectUI, useTonWallet } from '@tonconnect/ui-react';
-import { checkProof, getAccountInfo, saveProgress, getTonConnectPayload, getLeaderboard } from './services/api';
+import { checkProof, getAccountInfo, saveProgress, getTonConnectPayload, getLeaderboard, getGuestId } from './services/api';
 import { SYMBOLS, SHOP_ITEMS, DAILY_QUESTS, POINTS_NEEDED, TORCH_FRAMES, TOP_ANIMATION_FRAMES, WIN_ANIMATION_FRAMES, COIN_FRAMES, CLICK_SOUND_URL, WIN_SOUND_URL, COIN_SOUND_URL, SPIN_SOUND_URL, BACKGROUND_MUSIC_URL, DESTINATION_WALLET, JACKPOT_SOUND_BASE64 } from './constants';
 import { GameScreen, LeaderboardCategory, LeaderboardEntry, ShopItem } from './types';
 import { SlotReel } from './components/SlotReel';
@@ -403,8 +403,8 @@ const App: React.FC = () => {
         setScore(newScore);
     }
 
+    // syncWithBackend already calls saveProgress, no need for two calls
     syncWithBackend(newScore, spent, energy, referrals, quests);
-    saveProgress({ address: wallet?.account.address, score: newScore, energy, level: progression.level });
     
     setTimeout(() => { setIsSpinning(false); }, 400);
   };
@@ -649,16 +649,18 @@ const App: React.FC = () => {
             <div className={`screen-background absolute w-full h-full transition-transform duration-500 p-4 flex flex-col items-center pb-20 ${currentScreen === GameScreen.REF ? 'translate-x-0' : 'translate-x-full'}`}>
                  <h2 className="text-3xl pixel-text text-yellow-400 mt-4">Invites</h2>
                  <p className="text-gray-300 mt-2 text-[10px]">Total: <span className="text-yellow-400">{referrals}</span></p>
-                 <div className="mt-8 p-4 bg-black/40 rounded-lg w-full max-w-sm">
+                  <div className="mt-8 p-4 bg-black/40 rounded-lg w-full max-w-sm">
                      <p className="text-[10px] mb-2">Share your link:</p>
                      <div className="p-2 bg-gray-700 rounded-md flex justify-between items-center text-[10px] truncate">
-                         {`https://t.me/SlotAlchemyCryptoBot/playSlot?startapp=${wallet?.account.address?.slice(0,8) || 'guest'}`}
+                         {`https://t.me/SlotAlchemyCryptoBot/playSlot?startapp=${wallet?.account.address || getGuestId()}`}
                          <i className="fa-solid fa-copy text-blue-400 ml-2 cursor-pointer" onClick={(e) => {
                              e.stopPropagation(); playClick();
-                             navigator.clipboard.writeText(`https://t.me/SlotAlchemyCryptoBot/playSlot?startapp=${wallet?.account.address || 'guest'}`);
+                             const referralLink = `https://t.me/SlotAlchemyCryptoBot/playSlot?startapp=${wallet?.account.address || getGuestId()}`;
+                             navigator.clipboard.writeText(referralLink);
+                             alert('Referral link copied to clipboard!');
                          }}></i>
                      </div>
-                 </div>
+                  </div>
             </div>
         </div>
 
