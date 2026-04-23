@@ -23,15 +23,37 @@ if (!MONGODB_URI) {
   if (MONGODB_URI.includes('<password>')) {
     console.error('ERROR: Your MONGODB_URI still contains the "<password>" placeholder. Please replace it with your actual database password in the environment variables.');
   }
+
+  // Check for common unencoded special characters in the password part
+  try {
+    const uriParts = MONGODB_URI.split('://');
+    if (uriParts.length > 1) {
+      const authPart = uriParts[1].split('@')[0];
+      if (authPart.includes(':')) {
+        const password = authPart.split(':')[1];
+        if (/[@#:/!$]/.test(password)) {
+          console.warn('⚠️ WARNING: Your password contains special characters (@, #, !, etc.) that are NOT URL-encoded. This often causes "authentication failed" even if the password is correct.');
+          console.warn('👉 Suggestion: Create a database user with a password containing only letters and numbers, OR use an online tool to URL-encode your password.');
+        }
+      }
+    }
+  } catch (e) {
+    // Ignore parsing errors
+  }
   
   mongoose.connect(MONGODB_URI)
-    .then(() => console.log('Connected to MongoDB Atlas'))
+    .then(() => {
+      console.log('✅ SUCCESS: Connected to MongoDB Atlas');
+    })
     .catch(err => {
-      console.error('MongoDB connection error:', err.message);
+      console.error('❌ DATABASE ERROR:', err.message);
       if (err.message.includes('authentication failed')) {
-        console.error('FIX: Your database username or password in MONGODB_URI is incorrect.');
+        console.error('👉 FIX: Authentication failed. This usually means the USERNAME or PASSWORD in your MONGODB_URI is wrong.');
+      } else if (err.message.includes('ENOTFOUND')) {
+        console.error('👉 FIX: Host not found. Check if the cluster address in your MONGODB_URI is correct.');
+      } else if (err.message.includes('ETIMEDOUT') || err.message.includes('connection timed out')) {
+        console.error('👉 FIX: Connection timed out. Make sure you added "0.0.0.0/0" to your MongoDB Atlas Network Access whitelist.');
       }
-      console.error('Please ensure MONGODB_URI is correctly set in your environment variables.');
     });
 }
 
@@ -47,13 +69,33 @@ const userSchema = new mongoose.Schema({
   level: { type: Number, default: 1 },
   lastActive: { type: Number, default: Date.now },
   quests: { type: Map, of: Boolean, default: {} }
-});
+}, { bufferCommands: false }); // Disable buffering to prevent timeouts when DB is down
 
 const User = mongoose.model('User', userSchema);
 
+// Middleware para verificar conexão com o DB antes de processar rotas que dependem dele
+const checkDbConnection = (req, res, next) => {
+  if (mongoose.connection.readyState !== 1) {
+    if (req.method === 'GET' && req.path === '/api/me') {
+       // Retornar dados mockados para não travar o carregamento inicial do app
+       return res.json({
+         userId: 'offline_user',
+         score: 0,
+         energy: 100,
+         referrals: 0,
+         spent: 0,
+         level: 1,
+         offline: true
+       });
+    }
+    return res.status(503).json({ error: 'Database not connected', offline: true });
+  }
+  next();
+};
+
 // Health Check para o Render
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: Date.now() });
+  res.json({ status: 'ok', timestamp: Date.now(), dbConnected: mongoose.connection.readyState === 1 });
 });
 
 const MAX_ENERGY = 100;
@@ -76,7 +118,7 @@ app.get('/api/tonconnect/payload', (req, res) => {
   res.json({ payload });
 });
 
-app.get('/api/me', async (req, res) => {
+app.get('/api/me', checkDbConnection, async (req, res) => {
   const { address, guestId, referredBy } = req.query;
   const userAddress = address ? (address as string).toLowerCase() : null;
   const id = userAddress ? `wallet_${userAddress}` : (guestId as string || 'anonymous');
@@ -152,7 +194,7 @@ app.get('/api/me', async (req, res) => {
   }
 });
 
-app.post('/api/save-progress', async (req, res) => {
+app.post('/api/save-progress', checkDbConnection, async (req, res) => {
   const { address, guestId, score, level, energy, referrals, spent, questId } = req.body;
   const userAddress = address ? (address as string).toLowerCase() : null;
   const id = userAddress ? `wallet_${userAddress}` : (guestId as string || 'anonymous');
@@ -201,7 +243,7 @@ app.post('/api/save-progress', async (req, res) => {
   }
 });
 
-app.get('/api/leaderboard', async (req, res) => {
+app.get('/api/leaderboard', checkDbConnection, async (req, res) => {
   const { type, address } = req.query;
   const userAddress = (address as string)?.toLowerCase();
   
@@ -241,6 +283,7 @@ app.get('/api/leaderboard', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch leaderboard' });
   }
 });
+
 
 // Inicia o servidor para ambientes como Render, Railway ou Local
 const PORT = Number(process.env.PORT) || 3000;

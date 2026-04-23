@@ -585,7 +585,17 @@ const App: React.FC = () => {
                     </button>
                     <div className="flex items-center justify-center">
                         <img src={TORCH_FRAMES[torchFrame]} className="torch mr-4" alt="Torch Left" />
-                        <button 
+                       <div className="flex items-center justify-between p-3 bg-black/40 rounded-lg">
+                          <div className="flex items-center gap-3">
+                              <i className={`fa-solid fa-database ${loading ? 'text-gray-400' : (energy === 100 && score === 0 ? 'text-red-500' : 'text-green-500')}`}></i>
+                              <span className="text-[10px] pixel-text">Sync Status</span>
+                          </div>
+                          <span className={`text-[8px] pixel-text px-2 py-1 rounded ${loading ? 'bg-gray-700' : (currentUserEntry?.rank ? 'bg-green-600' : 'bg-red-900')}`}>
+                              {loading ? 'Checking...' : (currentUserEntry?.rank ? 'Online' : 'Offline Mode')}
+                          </span>
+                      </div>
+
+                      <button 
                             onPointerDown={handlePointerDown}
                             onPointerUp={handlePointerUp}
                             onPointerLeave={handlePointerUp}
@@ -695,6 +705,15 @@ const App: React.FC = () => {
                  <h3 className="text-xl pixel-text text-yellow-400 mb-6 text-center">Settings</h3>
                  
                  <div className="flex flex-col gap-4">
+                     <div className="flex items-center justify-between p-3 bg-black/40 rounded-lg">
+                         <div className="flex items-center gap-3">
+                             <i className={`fa-solid fa-server ${currentUserEntry?.rank ? 'text-green-400' : 'text-red-400'}`}></i>
+                             <span className="text-[10px] pixel-text">Database</span>
+                         </div>
+                         <span className={`text-[7px] pixel-text px-2 py-1 rounded ${currentUserEntry?.rank ? 'bg-green-600' : 'bg-red-900'}`}>
+                             {currentUserEntry?.rank ? 'CONNECTED' : 'OFFLINE MODE'}
+                         </span>
+                     </div>
                      <div className="flex items-center justify-between p-3 bg-black/40 rounded-lg">
                          <div className="flex items-center gap-3">
                              <i className={`fa-solid ${isSoundEnabled ? 'fa-volume-high text-green-400' : 'fa-volume-xmark text-red-400'}`}></i>
