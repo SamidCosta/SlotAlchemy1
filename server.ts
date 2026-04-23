@@ -244,30 +244,40 @@ app.post('/api/save-progress', checkDbConnection, async (req, res) => {
 });
 
 app.get('/api/leaderboard', checkDbConnection, async (req, res) => {
-  const { type, address } = req.query;
+  const { type, address, guestId } = req.query;
   const userAddress = (address as string)?.toLowerCase();
+  const guestIdentifier = guestId as string;
   
   try {
     const sortField = type as string || 'score';
     const allUsers = await User.find().sort({ [sortField]: -1 }).limit(50);
     
-    const rankedList = allUsers.map((u, index) => ({
-      rank: index + 1,
-      name: u.walletAddress ? `${u.walletAddress.slice(0, 4)}...${u.walletAddress.slice(-4)}` : `Guest_${u.userId.slice(-4)}`,
-      value: type === 'referrals' ? u.referrals : (type === 'spent' ? u.spent : u.score),
-      isCurrentUser: u.walletAddress?.toLowerCase() === userAddress
-    }));
+    const rankedList = allUsers.map((u, index) => {
+      const isCurrentByWallet = userAddress && u.walletAddress?.toLowerCase() === userAddress;
+      const isCurrentByGuest = guestIdentifier && u.userId === guestIdentifier;
+
+      return {
+        rank: index + 1,
+        name: u.walletAddress ? `${u.walletAddress.slice(0, 4)}...${u.walletAddress.slice(-4)}` : `Guest_${u.userId.slice(-4)}`,
+        value: type === 'referrals' ? u.referrals : (type === 'spent' ? u.spent : u.score),
+        isCurrentUser: !!(isCurrentByWallet || isCurrentByGuest)
+      };
+    });
 
     let currentUserEntry = rankedList.find(u => u.isCurrentUser);
 
     // Se o usuário não estiver no top 50, vamos buscar a posição real dele
-    if (!currentUserEntry && userAddress) {
-      const user = await User.findOne({ walletAddress: { $regex: new RegExp(`^${userAddress}$`, 'i') } });
+    if (!currentUserEntry && (userAddress || guestIdentifier)) {
+      const query = userAddress 
+        ? { walletAddress: { $regex: new RegExp(`^${userAddress}$`, 'i') } }
+        : { userId: guestIdentifier };
+
+      const user = await User.findOne(query);
       if (user) {
         const count = await User.countDocuments({ [sortField]: { $gt: user[sortField as keyof typeof user] } });
         currentUserEntry = {
           rank: count + 1,
-          name: `${user.walletAddress!.slice(0, 4)}...${user.walletAddress!.slice(-4)}`,
+          name: user.walletAddress ? `${user.walletAddress.slice(0, 4)}...${user.walletAddress.slice(-4)}` : `Guest_${user.userId.slice(-4)}`,
           value: type === 'referrals' ? user.referrals : (type === 'spent' ? user.spent : user.score),
           isCurrentUser: true
         };

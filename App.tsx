@@ -401,6 +401,25 @@ const App: React.FC = () => {
             new Audio(COIN_SOUND_URL).play().catch(e => console.log("Coin sound blocked:", e.message));
         }
         setScore(newScore);
+        
+        // SAVE IMMEDIATELY ON WIN
+        saveProgress({ 
+          address: wallet?.account.address, 
+          score: newScore, 
+          energy, 
+          level: progression.level 
+        }).then(() => {
+          // If leaderboard is open, refresh it to show new score
+          if (isLeaderboardOpen) {
+            setLoadingLeaderboard(true);
+            getLeaderboard(leaderboardTab, wallet?.account.address)
+              .then(res => {
+                setLeaderboardData(res?.list || []);
+                setCurrentUserEntry(res?.currentUserEntry || null);
+              })
+              .finally(() => setLoadingLeaderboard(false));
+          }
+        });
     }
 
     // syncWithBackend already calls saveProgress, no need for two calls
